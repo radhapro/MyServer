@@ -1,59 +1,73 @@
- // --- Jaroori tools ko bula rahe hain ---
+ // Step 1: Zaroori tools ko bulana
 const express = require('express');
 const mongoose = require('mongoose');
+require('dotenv').config(); // Isse hum .env file use kar payenge
 
-// --- Server bana rahe hain ---
+// Step 2: Server aur Port set karna
 const app = express();
-app.use(express.json()); // Ye server ko batata hai ki aane waala data JSON format mein hoga
+const PORT = process.env.PORT || 3000; // Render apne aap port de dega
 
-// --- Sabse Zaroori Hissa: Online Gullak se Judna ---
-// !!! YAHAAN APNA LINK DAALNA HAI !!!
-// Notepad se apna waala link copy karke in double-quotes "" ke beech mein daal de
-const mongoURI = "mongodb+srv://myuser:mypassword123@test.8j8lcqp.mongodb.net/?retryWrites=true&w=majority&appName=test";
+// Step 3: Server ko batana ki JSON data samjhe
+app.use(express.json());
 
-mongoose.connect(mongoURI)
-  .then(() => console.log("Waah bhai! Online Gullak (MongoDB) se jud gaya!"))
-  .catch((err) => console.log("ERROR: Online Gullak se judne mein gadbad hai:", err));
-
-// --- Gullak ko bata rahe hain ki data kaisa dikhega ---
-const sensorDataSchema = new mongoose.Schema({
-    temperature: Number,
-    humidity: Number,
-    timestamp: { type: Date, default: Date.now }
+// Step 4: Database se judne ki koshish
+mongoose.connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+})
+.then(() => {
+    console.log('MongoDB se jud gaye!');
+})
+.catch((err) => {
+    console.log('MongoDB se judne me error:', err);
 });
-const SensorData = mongoose.model('SensorData', sensorDataSchema);
 
+// Step 5: Database me data kaisa dikhega, uska structure banana
+const tempSchema = new mongoose.Schema({
+    temperature: {
+        type: Number,
+        required: true
+    },
+    timestamp: {
+        type: Date,
+        default: Date.now
+    }
+});
 
-// --- API ke Raaste bana rahe hain (ESP32 aur App ke liye) ---
+// Step 6: Ek model banana jo database me data save karega
+const TempData = mongoose.model('TempData', tempSchema);
 
-// Raasta 1: Jab ESP32 data bhejega (POST Request)
-app.post('/api/sensor', async (req, res) => {
+// Step 7: Ek raasta (route) banana jahan ESP32 data bhejega
+app.post('/data', async (req, res) => {
     try {
-        console.log("ESP32 se data aaya hai:", req.body);
-        const newData = new SensorData({
-            temperature: req.body.temperature,
-            humidity: req.body.humidity
+        const { temperature } = req.body; // ESP32 se temperature nikalna
+
+        // Agar temperature nahi mila to error bhejna
+        if (temperature === undefined) {
+            return res.status(400).send('Error: Temperature data nahi mila.');
+        }
+
+        console.log(`Data mila: Temperature = ${temperature}`);
+
+        // Naya data object banana
+        const newData = new TempData({
+            temperature: temperature
         });
-        await newData.save(); // Data ko gullak mein save kar do
-        res.send("Haan bhai, data mil gaya aur save kar liya!");
+
+        // Database me save karna
+        await newData.save();
+        console.log('Data database me save ho gaya!');
+
+        // ESP32 ko jawab bhejna ki sab theek hai
+        res.status(201).send('Data successfully save ho gaya!');
+
     } catch (error) {
-        res.send("Arre! Data save karne mein error aa gaya.");
+        console.log('Data save karne me error:', error);
+        res.status(500).send('Server me kuch error aa gaya.');
     }
 });
 
-// Raasta 2: Jab App sabse naya data maangegi (GET Request)
-app.get('/api/sensor/latest', async (req, res) => {
-    try {
-        const data = await SensorData.findOne().sort({ timestamp: -1 }); // Sabse naya data dhoondo
-        res.json(data); // App ko data bhej do
-    } catch (error) {
-        res.send("Arre! Data laane mein error aa gaya.");
-    }
-});
-
-
-// --- Server ko chalu kar rahe hain ---
-const PORT = 3000;
+// Step 8: Server ko chalu karna
 app.listen(PORT, () => {
-    console.log(`Server chalu ho gaya hai port number ${PORT} par...`);
+    console.log(`Server port ${PORT} par chalu ho gaya hai...`);
 });
